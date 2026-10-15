@@ -20,6 +20,7 @@ Intended for AI-assisted review: the agent leaves `{++…++}`, `{--…--}`, `{~~
 - **Human authoring** — insert or mark selections as any of the five CriticMarkup forms yourself, from the command palette or the *Track changes* right-click submenu, stamped with your name and date like a reply
 - **Finalize for publish** — resolves all remaining markup in one pass
 - Reading mode: accepted preview or raw side-by-side
+- Custom colors and tint intensity for additions, deletions, highlights, comments and AI-added text
 - Code blocks left alone
 
 ## Interaction

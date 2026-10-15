@@ -2,6 +2,15 @@ import { App, PluginSettingTab, debounce, type SettingDefinitionItem } from "obs
 import type TrackChangesCriticMarkupPlugin from "./main";
 import { DEFAULT_FINALIZE, type FinalizeOptions } from "./operations";
 import type { ReplyDateStyle } from "./operations";
+import {
+  DEFAULT_MARK_COLORS,
+  DEFAULT_MARK_INTENSITY,
+  EMPTY_MARK_COLORS,
+  MAX_MARK_INTENSITY,
+  MIN_MARK_INTENSITY,
+  type MarkColorKey,
+  type MarkColors,
+} from "./colors";
 
 export type PanelLocation = "sidebar" | "split";
 
@@ -47,6 +56,10 @@ export interface TrackChangesCriticMarkupSettings {
    *  sidebar ("sidebar", default) or a new vertical split beside the active
    *  note ("split"). An existing panel is always revealed where it is. */
   panelLocation: PanelLocation;
+  /** Colour overrides for marks; `""` per entry keeps the built-in colour. */
+  colors: MarkColors;
+  /** Percentage multiplier on the tint alphas (100 = built-in strength). */
+  markIntensity: number;
   /** Defaults that pre-populate the Finalize dialog. */
   finalize: FinalizeOptions;
 }
@@ -60,10 +73,23 @@ export const DEFAULT_SETTINGS: TrackChangesCriticMarkupSettings = {
   localAuthorName: "",
   replyDateStyle: "date",
   panelLocation: "sidebar",
+  colors: { ...EMPTY_MARK_COLORS },
+  markIntensity: DEFAULT_MARK_INTENSITY,
   finalize: { ...DEFAULT_FINALIZE },
 };
 
 const FINALIZE_PREFIX = "finalize.";
+const COLORS_PREFIX = "colors.";
+
+const COLOR_ROWS: { key: MarkColorKey; name: string; desc?: string }[] = [
+  { key: "addition", name: "Addition", desc: "Also the new text of a substitution." },
+  { key: "deletion", name: "Deletion", desc: "Also the old text of a substitution." },
+  { key: "highlight", name: "Highlight" },
+  { key: "aiTextStart", name: "AI-added text — gradient start" },
+  { key: "aiTextEnd", name: "AI-added text — gradient end" },
+  { key: "commentYou", name: "Your comments" },
+  { key: "commentAi", name: "Other authors' comments", desc: "Background of comment markup in the editor." },
+];
 
 export class TrackChangesCriticMarkupSettingsTab extends PluginSettingTab {
   plugin: TrackChangesCriticMarkupPlugin;
@@ -157,8 +183,38 @@ export class TrackChangesCriticMarkupSettingsTab extends PluginSettingTab {
         ],
       },
       {
-        type: "group",
-        heading: "Finalize for publish — defaults",
+        type: "page",
+        name: "Colours",
+        desc: "Mark colours and tint strength.",
+        items: [
+          {
+            name: "Mark intensity",
+            desc: "Strength of the background tints on additions, deletions, highlights and comments.",
+            control: {
+              type: "slider",
+              key: "markIntensity",
+              min: MIN_MARK_INTENSITY,
+              max: MAX_MARK_INTENSITY,
+              step: 25,
+              displayFormat: (v) => `${v}%`,
+            },
+          },
+          ...COLOR_ROWS.map((r) => ({
+            name: r.name,
+            desc: r.desc,
+            control: { type: "color" as const, key: COLORS_PREFIX + r.key },
+          })),
+          {
+            name: "Reset colours",
+            desc: "Restore the built-in colours and intensity.",
+            action: () => void this.resetColors(),
+          },
+        ],
+      },
+      {
+        type: "page",
+        name: "Finalize for publish",
+        desc: "Defaults for the Finalize dialog.",
         items: [
           {
             name: "Additions",
@@ -199,6 +255,10 @@ export class TrackChangesCriticMarkupSettingsTab extends PluginSettingTab {
   }
 
   getControlValue(key: string): unknown {
+    if (key.startsWith(COLORS_PREFIX)) {
+      const k = key.slice(COLORS_PREFIX.length) as MarkColorKey;
+      return this.plugin.settings.colors[k] || DEFAULT_MARK_COLORS[k];
+    }
     if (key.startsWith(FINALIZE_PREFIX)) {
       return (this.plugin.settings.finalize as unknown as Record<string, unknown>)[
         key.slice(FINALIZE_PREFIX.length)
@@ -208,6 +268,14 @@ export class TrackChangesCriticMarkupSettingsTab extends PluginSettingTab {
   }
 
   async setControlValue(key: string, value: unknown): Promise<void> {
+    if (key.startsWith(COLORS_PREFIX)) {
+      const k = key.slice(COLORS_PREFIX.length) as MarkColorKey;
+      const hex = String(value).toLowerCase();
+      this.plugin.settings.colors[k] = hex === DEFAULT_MARK_COLORS[k] ? "" : hex;
+      await this.plugin.saveSettings();
+      this.plugin.applyColors();
+      return;
+    }
     if (key.startsWith(FINALIZE_PREFIX)) {
       (this.plugin.settings.finalize as unknown as Record<string, unknown>)[
         key.slice(FINALIZE_PREFIX.length)
@@ -227,5 +295,14 @@ export class TrackChangesCriticMarkupSettingsTab extends PluginSettingTab {
 
     if (key === "readingShowComments") this.plugin.rerenderReadingViews();
     else if (key === "highlightChangedChars") this.plugin.refreshCharHighlighting();
+    else if (key === "markIntensity") this.plugin.applyColors();
+  }
+
+  private async resetColors(): Promise<void> {
+    this.plugin.settings.colors = { ...EMPTY_MARK_COLORS };
+    this.plugin.settings.markIntensity = DEFAULT_MARK_INTENSITY;
+    await this.plugin.saveSettings();
+    this.plugin.applyColors();
+    this.update();
   }
 }
