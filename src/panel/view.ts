@@ -349,6 +349,7 @@ export class ReviewPanelView extends ItemView {
       }
       if (target.closest(".tc-card-actions, .tc-reply, button, textarea, input"))
         return;
+      if (hasSelectionIn(card)) return;
       // With an anchor, jump to the commented span rather than the chip.
       const from = anchor ? anchor.from : thread.from;
       this.host.revealOffset(file, from, thread.to - from, true);
@@ -508,6 +509,7 @@ export class ReviewPanelView extends ItemView {
     card.addEventListener("click", (e) => {
       const target = e.target as HTMLElement;
       if (target.closest(".tc-reply, button, textarea, input")) return;
+      if (hasSelectionIn(card)) return;
       if (thread) this.host.revealOffset(file, n.from, thread.to - n.from, true);
       else this.host.revealOffset(file, n.from, n.to - n.from);
     });
@@ -621,6 +623,7 @@ export class ReviewPanelView extends ItemView {
         return;
       }
       if (target.closest("button")) return;
+      if (hasSelectionIn(card)) return;
       this.host.revealOffset(file, n.from, n.to - n.from);
     });
 
@@ -849,4 +852,10 @@ class ConfirmActionModal extends Modal {
     this.resolve(confirmed);
     this.close();
   }
+}
+
+/** True when the user just selected text inside `card` (so a click shouldn't jump away). */
+function hasSelectionIn(card: HTMLElement): boolean {
+  const sel = card.win.getSelection();
+  return !!sel && !sel.isCollapsed && card.contains(sel.anchorNode);
 }

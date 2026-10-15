@@ -227,7 +227,7 @@ function locateAll(
       }
     }
     if (op.closeIn) {
-      const found = locateClose(el, op.node, cursor);
+      const found = locateClose(el, op.node, cursor, loc.wrapEl);
       if (found) {
         loc.closeRange = found.range;
         cursor = found.range.end;
@@ -252,10 +252,10 @@ function locateOpen(
   cursor: TextPos,
 ): { range: DomRange; wrapEl?: Element } | null {
   if (node.kind === "highlight") {
-    return locateBracedWrapper(el, cursor, ["MARK"]);
+    return locateBracedWrapper(el, cursor, "==", ["MARK"]);
   }
   if (node.kind === "substitution") {
-    return locateBracedWrapper(el, cursor, ["DEL", "S"]);
+    return locateBracedWrapper(el, cursor, "~~", ["DEL", "S"]);
   }
   // addition / deletion / comment: the open token is `{<prefix><sigil>` where
   // the (optional) metadata prefix survives in the DOM as literal text. Match
@@ -300,12 +300,13 @@ function locateClose(
   el: HTMLElement,
   node: CriticNode,
   cursor: TextPos,
+  wrapEl?: Element,
 ): { range: DomRange } | null {
   if (node.kind === "highlight") {
-    return locateBracedCloser(el, cursor, "==}");
+    return locateBracedCloser(el, cursor, "==}", wrapEl);
   }
   if (node.kind === "substitution") {
-    return locateBracedCloser(el, cursor, "~~}");
+    return locateBracedCloser(el, cursor, "~~}", wrapEl);
   }
   const tok = closeLiteral(node.kind);
   return locateLiteral(el, cursor, tok);
@@ -348,30 +349,37 @@ function locateLiteral(
 
 /**
  * Locate the open token of a markup whose internal delimiters are also
- * native markdown (`==` → <mark>, `~~` → <del>/<s>). Try the literal token
- * first (in case Obsidian didn't eat them — e.g., leading/trailing space
- * inside disqualifies the syntax); otherwise look for `{` immediately
- * followed by an element with one of `tags`.
+ * native markdown (`==` → <mark>, `~~` → <del>/<s>). At each `{`, accept
+ * either the literal `{<prefix><sigil>` (Obsidian didn't eat the sigil — e.g.
+ * leading/trailing space inside disqualifies the syntax) or `{<prefix>`
+ * immediately followed by an element with one of `tags`. The first `{` that
+ * matches wins — preferring a literal match further ahead would grab the open
+ * of a later mark (issue #49).
  */
 function locateBracedWrapper(
   el: HTMLElement,
   cursor: TextPos,
+  sigil: string,
   tags: string[],
 ): { range: DomRange; wrapEl?: Element } | null {
-  // Obsidian didn't eat the sigil (e.g. leading/trailing space disqualified
-  // `==`/`~~`): the whole `{<prefix><sigil>` is literal text in one node.
-  const lit = locateOpenSigil(el, cursor);
-  if (lit) return { range: lit.range };
-
-  // Sigil eaten into the following <mark>/<del>/<s>; only `{<prefix>` remains
-  // as literal text. Match `{` + optional prefix at the (whitespace) tail and
-  // delete the whole `{<prefix>` so the prefix is never echoed.
   let node: Text | null = cursor.node;
   let offset = cursor.offset;
   while (node) {
     const text = node.nodeValue ?? "";
     let idx = text.indexOf("{", offset);
     while (idx >= 0) {
+      const lit = OPEN_WITH_PREFIX.exec(text.slice(idx));
+      if (lit && lit[0].endsWith(sigil)) {
+        return {
+          range: {
+            start: { node, offset: idx },
+            end: { node, offset: idx + lit[0].length },
+          },
+        };
+      }
+      // Sigil eaten into the following <mark>/<del>/<s>; only `{<prefix>`
+      // remains as literal text. Delete the whole `{<prefix>` so the prefix
+      // is never echoed.
       const m = OPEN_PREFIX_THEN_WS.exec(text.slice(idx));
       if (m) {
         // m[0] = `{<prefix>` + trailing whitespace; strip the trailing ws from
@@ -428,10 +436,24 @@ function locateBracedCloser(
   el: HTMLElement,
   cursor: TextPos,
   literalToken: string,
+  wrapEl?: Element,
 ): { range: DomRange } | null {
-  const lit = locateLiteral(el, cursor, literalToken);
-  if (lit) return lit;
-  return locateLiteral(el, cursor, "}");
+  if (!wrapEl) return locateLiteral(el, cursor, literalToken);
+  // Sigil eaten into the wrapper: the closer is the `}` right after it.
+  // Searching for the literal token instead could match a later mark's close
+  // (issue #49).
+  const after = firstTextAfter(el, wrapEl);
+  return after ? locateLiteral(el, { node: after, offset: 0 }, "}") : null;
+}
+
+function firstTextAfter(root: HTMLElement, wrapEl: Element): Text | null {
+  const w = makeWalker(root);
+  let n = w.nextNode();
+  while (n && (wrapEl.contains(n) ||
+    !(wrapEl.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING))) {
+    n = w.nextNode();
+  }
+  return n as Text | null;
 }
 
 // ---------- Mutation ----------
