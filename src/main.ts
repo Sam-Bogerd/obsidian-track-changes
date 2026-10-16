@@ -26,6 +26,15 @@ import {
 import { parse, type ParseResult } from "./parser";
 import { makeReadingPostProcessor } from "./reading";
 import { FinalizeModal } from "./finalize";
+import {
+  DEFAULT_MARK_INTENSITY,
+  EMPTY_MARK_COLORS,
+  MAX_MARK_INTENSITY,
+  MIN_MARK_INTENSITY,
+  colorCssProps,
+  isHexColor,
+  type MarkColorKey,
+} from "./colors";
 import { buildMark, checkGuards, type AuthoringKind } from "./authoring";
 import {
   DEFAULT_SETTINGS,
@@ -93,6 +102,14 @@ export default class TrackChangesCriticMarkupPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
+
+    // Colour overrides live as inline CSS variables on each window's body.
+    this.applyColors();
+    this.registerEvent(
+      this.app.workspace.on("window-open", (_w, win) => {
+        win.document.body.setCssProps(this.colorProps());
+      }),
+    );
 
     // Per-window review panel registration.
     this.registerView(REVIEW_VIEW_TYPE, (leaf) => this.makeReviewView(leaf));
@@ -226,10 +243,18 @@ export default class TrackChangesCriticMarkupPlugin extends Plugin {
   onunload(): void {
     // Leaves of our view type are detached automatically when their root is.
     // (Obsidian guidance: do NOT call detachLeavesOfType in onunload.)
+    const cleared = Object.fromEntries(Object.keys(this.colorProps()).map((k) => [k, ""]));
+    for (const doc of this.allDocuments()) doc.body.setCssProps(cleared);
   }
 
   async loadSettings(): Promise<void> {
     const stored = ((await this.loadData()) ?? {}) as Partial<TrackChangesCriticMarkupSettings>;
+    const colors = { ...EMPTY_MARK_COLORS };
+    for (const k of Object.keys(colors) as MarkColorKey[]) {
+      const v = stored.colors?.[k];
+      if (isHexColor(v)) colors[k] = v.toLowerCase();
+    }
+    const intensity = Number(stored.markIntensity);
     this.settings = {
       ...DEFAULT_SETTINGS,
       ...stored,
@@ -237,8 +262,28 @@ export default class TrackChangesCriticMarkupPlugin extends Plugin {
       // leak an invalid style downstream; anything but "datetime" means "date".
       replyDateStyle: stored.replyDateStyle === "datetime" ? "datetime" : "date",
       panelLocation: stored.panelLocation === "split" ? "split" : "sidebar",
+      colors,
+      markIntensity: Number.isFinite(intensity)
+        ? Math.min(MAX_MARK_INTENSITY, Math.max(MIN_MARK_INTENSITY, intensity))
+        : DEFAULT_MARK_INTENSITY,
       finalize: { ...DEFAULT_SETTINGS.finalize, ...(stored.finalize ?? {}) },
     };
+  }
+
+  private colorProps(): Record<string, string> {
+    return colorCssProps(this.settings.colors, this.settings.markIntensity);
+  }
+
+  /** The main window's document plus every pop-out window's. */
+  private allDocuments(): Set<Document> {
+    const docs = new Set<Document>([document]);
+    this.app.workspace.iterateAllLeaves((leaf) => docs.add(leaf.view.containerEl.doc));
+    return docs;
+  }
+
+  applyColors(): void {
+    const props = this.colorProps();
+    for (const doc of this.allDocuments()) doc.body.setCssProps(props);
   }
 
   async saveSettings(): Promise<void> {
