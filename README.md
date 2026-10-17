@@ -8,7 +8,12 @@ Intended for AI-assisted review: the agent leaves `{++…++}`, `{--…--}`, `{~~
 
 ![Each CriticMarkup form as raw syntax next to its rendering in Live Preview](docs/syntax_showcase.png)
 
-[`docs/SKILL.md`](https://github.com/philphilphil/obsidian-track-changes/blob/main/docs/SKILL.md) is a starting-point reviewer skill you can hand your agent.
+## Agent setup
+
+Your agent needs to know the mark format. Two starting points:
+
+- [`docs/SKILL.md`](https://github.com/philphilphil/obsidian-track-changes/blob/main/docs/SKILL.md) — a minimal reviewer skill you can hand to any agent.
+- [claude-plugin-obsidian-track-changes-agent](https://github.com/johntrandall/claude-plugin-obsidian-track-changes-agent) — a Claude Code plugin by [@johntrandall](https://github.com/johntrandall). It signs every mark, attaches rationale comments, holds off while you're typing, and can watch a note to answer your comments live. Third-party; not maintained here.
 
 ## Features
 
