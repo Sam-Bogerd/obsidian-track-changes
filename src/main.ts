@@ -2,6 +2,7 @@ import {
   Plugin,
   MarkdownView,
   FileView,
+  View,
   WorkspaceLeaf,
   TFile,
   Notice,
@@ -331,10 +332,11 @@ export default class TrackChangesCriticMarkupPlugin extends Plugin {
     });
   }
 
-  // Obsidian's suggested alternatives don't expose the originating leaf for
-  // non-markdown views; capture it before revealing a panel changes focus.
+  // Any view, not just FileView: a focused review panel or canvas still tells
+  // us which window the command came from. Capture it before revealing a panel
+  // changes focus.
   private getActiveLeaf(): WorkspaceLeaf | null {
-    return this.app.workspace.activeLeaf;
+    return this.app.workspace.getActiveViewOfType(View)?.leaf ?? null;
   }
 
   // ---- host implementation for the panel ----

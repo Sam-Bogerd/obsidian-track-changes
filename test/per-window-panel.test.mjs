@@ -4,10 +4,13 @@ import { createRequire } from "node:module";
 import { runInNewContext } from "node:vm";
 import { build } from "esbuild";
 
-class FileView {}
+class View {}
+class FileView extends View {}
 class MarkdownView extends FileView {}
-class ItemView {
+class ItemView extends View {
   constructor(leaf) {
+    super();
+    this.leaf = leaf;
     this.app = leaf.app;
     this.containerEl = leaf.view.containerEl;
     this.contentEl = { addClass() {} };
@@ -15,7 +18,7 @@ class ItemView {
   registerEvent() {}
 }
 const obsidian = {
-  FileView, MarkdownView, ItemView,
+  View, FileView, MarkdownView, ItemView,
   Plugin: class {}, Modal: class {}, PluginSettingTab: class {},
   TFile: class {}, Notice: class {},
   debounce: (fn) => fn,
@@ -46,6 +49,8 @@ function fixture() {
   const leaves = [], events = new Map(), calls = [];
   const workspace = {
     rootSplit, activeLeaf: null,
+    getActiveViewOfType: (type) =>
+      workspace.activeLeaf?.view instanceof type ? workspace.activeLeaf.view : null,
     getLeavesOfType: (type) => leaves.filter((leaf) => leaf.type === type),
     on: (event, fn) => { events.set(event, [...(events.get(event) ?? []), fn]); },
     revealLeaf: async (leaf) => {
@@ -68,7 +73,7 @@ function fixture() {
   plugin.app = { workspace, vault: { on() {}, process: async (_file, fn) => fn("{++x++}") } };
   plugin.settings = {};
   function newLeaf(document, file) {
-    const view = file ? new MarkdownView() : {};
+    const view = file ? new MarkdownView() : new View();
     Object.assign(view, { containerEl: { ownerDocument: document }, file });
     const leaf = {
       app: plugin.app, view, type: file ? "markdown" : "empty",
@@ -81,6 +86,7 @@ function fixture() {
       },
       refreshes: [],
     };
+    view.leaf = leaf;
     leaves.push(leaf);
     return leaf;
   }
