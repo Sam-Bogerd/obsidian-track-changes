@@ -56,6 +56,16 @@ test("accepts hyphenated names like GPT-4", () => {
   assert.equal(r.nodes[0].text, "hi");
 });
 
+test("accepts emoji and non-ASCII names (issue #56)", () => {
+  const r = parse("{>>🤖: nice<<}");
+  assert.equal(r.nodes[0].authorName, "🤖");
+  assert.equal(r.nodes[0].metaAuthor, "🤖");
+  assert.equal(r.nodes[0].text, "nice");
+  const r2 = parse("{>>José: hola<<}");
+  assert.equal(r2.nodes[0].authorName, "José");
+  assert.equal(r2.nodes[0].text, "hola");
+});
+
 test("unprefixed comment has null authorName", () => {
   const r = parse("hello {>>done<<} world");
   assert.equal(r.nodes[0].authorName, null);

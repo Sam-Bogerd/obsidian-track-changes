@@ -1,7 +1,10 @@
 // Author detection and per-author color assignment.
 //
 // A CriticMarkup comment is "named" if its body starts with `<Name>:` where
-// `<Name>` is a single token (alpha-leading, \w/./- body, max 30 chars).
+// `<Name>` is a single token, max 30 code points. It starts with a letter in
+// any script or an emoji, and continues with letters, combining marks, digits,
+// emoji (incl. skin tones, flags and ZWJ sequences like 👩‍💻), `_`, `.`, `-`.
+// ASCII names match exactly as with the old `[A-Za-z][\w.-]{0,29}`.
 // Otherwise it's unnamed — the local user, rendered as "You".
 //
 // Each named author gets a hue from a small palette. Well-known LLM names
@@ -10,7 +13,8 @@
 // through to a hash. The palette itself lives in `styles.css` as
 // `--tc-author-hue-N` CSS variables.
 
-export const AUTHOR_RE = /^\s*([A-Za-z][\w.-]{0,29})\s*:\s*/;
+export const AUTHOR_RE =
+  /^\s*((?:\p{L}|\p{Extended_Pictographic}|\p{Regional_Indicator})[\p{L}\p{M}\p{N}\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\u200D_.-]{0,29})\s*:\s*/u;
 
 // Hue indices match --tc-author-hue-N in styles.css:
 //   0 blue, 1 purple, 2 green, 3 orange, 4 pink, 5 teal, 6 yellow, 7 red.
